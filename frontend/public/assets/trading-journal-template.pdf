@@ -1,0 +1,162 @@
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+/Resources <<
+/Font <<
+/F1 5 0 R
+>>
+>>
+>>
+endobj
+
+4 0 obj
+<<
+/Length 100
+>>
+stream
+BT
+/F1 16 Tf
+72 700 Td
+(Trading Journal Template) Tj
+ET
+BT
+/F1 12 Tf
+72 650 Td
+(Date: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 630 Td
+(Symbol: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 610 Td
+(Direction: [ ] Long [ ] Short) Tj
+ET
+BT
+/F1 12 Tf
+72 590 Td
+(Entry Time: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 570 Td
+(Entry Price: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 550 Td
+(Target Price: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 530 Td
+(Stop Loss: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 510 Td
+(Exit Time: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 490 Td
+(Exit Price: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 470 Td
+(Profit/Loss: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 450 Td
+(Position Size: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 430 Td
+(Risk Amount: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 410 Td
+(Risk/Reward Ratio: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 390 Td
+(Market Conditions: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 370 Td
+(Entry Rationale: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 350 Td
+(Exit Rationale: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 330 Td
+(Lesson Learned: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 310 Td
+(Emotional State: _____________) Tj
+ET
+BT
+/F1 12 Tf
+72 290 Td
+(Overall Rating: [ ] 1 [ ] 2 [ ] 3 [ ] 4 [ ] 5) Tj
+ET
+endstream
+endobj
+
+5 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000010 00000 n 
+0000000053 00000 n 
+0000000125 00000 n 
+0000000292 00000 n 
+0000000747 00000 n 
+trailer
+<<
+/Size 6
+/Root 1 0 R
+>>
+startxref
+797
+%%EOF

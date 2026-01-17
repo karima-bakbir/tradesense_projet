@@ -1,0 +1,157 @@
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+/Resources <<
+/Font <<
+/F1 5 0 R
+>>
+>>
+>>
+endobj
+
+4 0 obj
+<<
+/Length 100
+>>
+stream
+BT
+/F1 16 Tf
+72 700 Td
+(Expert Certification Exam) Tj
+ET
+BT
+/F1 12 Tf
+72 650 Td
+(Qualified Financial Trader Expert Certification) Tj
+ET
+BT
+/F1 12 Tf
+72 630 Td
+(Instructions: Answer all questions. Time limit: 3 hours.) Tj
+ET
+BT
+/F1 12 Tf
+72 590 Td
+(Section A: Quantitative Analysis \(40 marks\)) Tj
+ET
+BT
+/F1 12 Tf
+72 570 Td
+(1. Derive the Black-Scholes formula for European call options. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 550 Td
+(2. Explain the concept of implied volatility and its role in options pricing. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 530 Td
+(3. Describe the GARCH\(1,1\) model and its applications in volatility forecasting. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 510 Td
+(4. Calculate the optimal portfolio weights using mean-variance optimization. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 470 Td
+(Section B: Trading Strategies \(35 marks\)) Tj
+ET
+BT
+/F1 12 Tf
+72 450 Td
+(5. Design a statistical arbitrage strategy using cointegration analysis. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 430 Td
+(6. Compare and contrast momentum and mean reversion strategies. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 410 Td
+(7. Evaluate the risks associated with high-frequency trading. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 370 Td
+(Section C: Risk Management \(25 marks\)) Tj
+ET
+BT
+/F1 12 Tf
+72 350 Td
+(8. Explain Value at Risk \(VaR\) and Expected Shortfall measures. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 330 Td
+(9. Discuss tail risk hedging strategies for institutional portfolios. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 290 Td
+(Section D: Market Microstructure \(20 marks\)) Tj
+ET
+BT
+/F1 12 Tf
+72 270 Td
+(10. Analyze the impact of order flow on price formation. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 250 Td
+(11. Describe the mechanics of market making and inventory management. $$ marks$$) Tj
+ET
+BT
+/F1 12 Tf
+72 210 Td
+(Total Marks: 120) Tj
+ET
+endstream
+endobj
+
+5 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000010 00000 n 
+0000000053 00000 n 
+0000000125 00000 n 
+0000000292 00000 n 
+0000000747 00000 n 
+trailer
+<<
+/Size 6
+/Root 1 0 R
+>>
+startxref
+797
+%%EOF

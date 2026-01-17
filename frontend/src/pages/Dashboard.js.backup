@@ -1,0 +1,3099 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { 
+  Container, 
+  Grid, 
+  Paper, 
+  Typography, 
+  Button, 
+  List, 
+  ListItem, 
+  ListItemText, 
+  Chip, 
+  Box,
+  Divider,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
+} from '@mui/material';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip as ChartTooltip,
+  Legend,
+  TimeScale,
+  Filler
+} from 'chart.js';
+import { styled } from '@mui/system';
+import api, { createTrade, updateChallengeBalance, getPrice, getChallenge, getMultiplePrices, getMultipleAISignals, getPopularAISignals } from '../utils/api';
+import { useAppContext } from '../contexts/AppContext';
+import { useUserContext } from '../contexts/UserContext';
+import { useNavigate } from 'react-router-dom';
+import 'hammerjs';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  ChartTooltip,
+  Legend,
+  TimeScale,
+  Filler
+);
+
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(2),
+  textAlign: 'center',
+  color: theme.palette.text.secondary,
+  height: '100%',
+}));
+
+const SignalChip = styled(Chip)(({ theme }) => ({
+  margin: theme.spacing(0.5),
+  fontWeight: 'bold',
+}));
+
+const Dashboard = () => {
+  const { t } = useAppContext();
+  const { user, loading, isAuthenticated } = useUserContext();
+  const navigate = useNavigate();
+  
+  // All state hooks at the top to comply with React Hooks rules
+  const [balance, setBalance] = useState(5000);  // Default starting balance
+  const [challengeId, setChallengeId] = useState(null);  // Will be fetched based on user session
+  const [currentPrice, setCurrentPrice] = useState(150.25);
+  const [selectedAsset, setSelectedAsset] = useState('AAPL');
+  const [challengeStatus, setChallengeStatus] = useState('active');  // Track challenge status
+  const [tradeSize, setTradeSize] = useState(10);  // Default trade size, can be increased for demo purposes
+  
+  const [aiSignals, setAiSignals] = useState([]);
+  const [detailedSignal, setDetailedSignal] = useState(null);
+  const [showDetailedSignal, setShowDetailedSignal] = useState(false);
+  const [chartData, setChartData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showCommunitySection, setShowCommunitySection] = useState(false);
+  const [showTradingStrategies, setShowTradingStrategies] = useState(false);
+  const [showMarketDiscussions, setShowMarketDiscussions] = useState(false);
+  const [showExpertInsights, setShowExpertInsights] = useState(false);
+  const [detailedInsight, setDetailedInsight] = useState(null);
+  const [showDetailedInsight, setShowDetailedInsight] = useState(false);
+  const [showTradingMasterclass, setShowTradingMasterclass] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [showCourseDetail, setShowCourseDetail] = useState(false);
+  // Technical Analysis State
+  const [selectedIndicator, setSelectedIndicator] = useState('sma'); // Simple Moving Average
+  const [indicatorPeriod, setIndicatorPeriod] = useState(20);
+  const [showRSI, setShowRSI] = useState(false);
+  const [showBollinger, setShowBollinger] = useState(false);
+  const [showMACD, setShowMACD] = useState(false);
+  const [showStochastic, setShowStochastic] = useState(false);
+  const [showWilliamsR, setShowWilliamsR] = useState(false);
+  const communityRef = useRef(null);
+  const strategiesRef = useRef(null);
+  const discussionsRef = useRef(null);
+  const insightsRef = useRef(null);
+  
+  // Check authentication status
+  const [authChecked, setAuthChecked] = useState(false);
+  
+  useEffect(() => {
+    if (!loading) {
+      if (!isAuthenticated) {
+        navigate('/login');
+      } else {
+        setAuthChecked(true);
+      }
+    }
+  }, [isAuthenticated, loading, navigate]);
+  
+  // Show loading state while checking authentication
+  if (loading || !authChecked) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Typography variant="h6" align="center">
+          Loading...
+        </Typography>
+      </Container>
+    );
+  }
+  
+  // At this point, we know the user is authenticated, so we can safely define all hooks
+  
+  // Function to fetch latest challenge data to ensure sync with database
+  const fetchLatestChallengeData = async () => {
+    if (!challengeId) return;
+      
+    try {
+      const response = await getChallenge(challengeId);
+      if (response.data) {
+        setBalance(response.data.current_balance);
+        setChallengeStatus(response.data.status);
+        console.log(`Synced challenge data: Balance=${response.data.current_balance}, Status=${response.data.status}`);
+      }
+    } catch (error) {
+      console.error('Error fetching latest challenge data:', error);
+    }
+  };
+  
+  // Define available assets
+  const assets = [
+    { symbol: 'AAPL', name: 'Apple Inc.' },
+    { symbol: 'TSLA', name: 'Tesla Inc.' },
+    { symbol: 'IAM', name: 'IAM' },
+    { symbol: 'ATW', name: 'ATW' },
+    { symbol: 'MSFT', name: 'Microsoft Corp.' },
+    { symbol: 'GOOGL', name: 'Alphabet Inc.' },
+    { symbol: 'AMZN', name: 'Amazon.com Inc.' },
+    { symbol: 'META', name: 'Meta Platforms Inc.' },
+    { symbol: 'NVDA', name: 'NVIDIA Corp.' },
+    { symbol: 'NFLX', name: 'Netflix Inc.' },
+    { symbol: 'BTC-USD', name: 'Bitcoin' },
+    { symbol: 'ETH-USD', name: 'Ethereum' },
+    { symbol: 'XRP-USD', name: 'Ripple' },
+  ];
+  
+  // Calculate Simple Moving Average
+  const calculateSMA = useCallback((data, period) => {
+    const sma = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        sma.push(null);
+      } else {
+        const sum = data.slice(i - period + 1, i + 1).reduce((acc, item) => acc + item.price, 0);
+        sma.push(parseFloat((sum / period).toFixed(2)));
+      }
+    }
+    return sma;
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Calculate Exponential Moving Average
+  const calculateEMA = useCallback((data, period) => {
+    const ema = [];
+    const k = 2 / (period + 1);
+    
+    for (let i = 0; i < data.length; i++) {
+      if (i === 0) {
+        ema.push(data[i].price);
+      } else {
+        const prevEma = ema[i - 1];
+        ema.push(parseFloat(((data[i].price - prevEma) * k + prevEma).toFixed(2)));
+      }
+    }
+    return ema;
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Calculate RSI
+  const calculateRSI = useCallback((data, period = 14) => {
+    const rsi = [];
+    for (let i = 0; i < data.length; i++) {
+      if (i < period) {
+        rsi.push(null);
+      } else {
+        let gains = 0;
+        let losses = 0;
+        
+        for (let j = i - period + 1; j <= i; j++) {
+          const change = data[j].price - data[j - 1].price;
+          if (change > 0) {
+            gains += change;
+          } else {
+            losses += Math.abs(change);
+          }
+        }
+        
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        
+        if (avgLoss === 0) {
+          rsi.push(100);
+        } else {
+          const rs = avgGain / avgLoss;
+          rsi.push(parseFloat((100 - (100 / (1 + rs))).toFixed(2)));
+        }
+      }
+    }
+    return rsi;
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Calculate Bollinger Bands
+  const calculateBollingerBands = useCallback((data, period = 20, stdDev = 2) => {
+    const middleBand = [];
+    const upperBand = [];
+    const lowerBand = [];
+    
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        middleBand.push(null);
+        upperBand.push(null);
+        lowerBand.push(null);
+      } else {
+        const prices = data.slice(i - period + 1, i + 1).map(item => item.price);
+        const sum = prices.reduce((acc, price) => acc + price, 0);
+        const avg = sum / period;
+        
+        const variance = prices.reduce((acc, price) => acc + Math.pow(price - avg, 2), 0) / period;
+        const std = Math.sqrt(variance);
+        
+        middleBand.push(parseFloat(avg.toFixed(2)));
+        upperBand.push(parseFloat((avg + (std * stdDev)).toFixed(2)));
+        lowerBand.push(parseFloat((avg - (std * stdDev)).toFixed(2)));
+      }
+    }
+    
+    return { middle: middleBand, upper: upperBand, lower: lowerBand };
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Calculate MACD (Moving Average Convergence Divergence)
+  const calculateMACD = useCallback((data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) => {
+    const emaFast = calculateEMA(data, fastPeriod);
+    const emaSlow = calculateEMA(data, slowPeriod);
+    
+    const macdLine = [];
+    for (let i = 0; i < data.length; i++) {
+      if (emaSlow[i] !== null && emaFast[i] !== null) {
+        macdLine.push(parseFloat((emaFast[i] - emaSlow[i]).toFixed(2)));
+      } else {
+        macdLine.push(null);
+      }
+    }
+    
+    const signalLine = calculateEMA(macdLine.map(val => val !== null ? val : 0), signalPeriod);
+    
+    const histogram = [];
+    for (let i = 0; i < data.length; i++) {
+      if (macdLine[i] !== null && signalLine[i] !== null) {
+        histogram.push(parseFloat((macdLine[i] - signalLine[i]).toFixed(2)));
+      } else {
+        histogram.push(null);
+      }
+    }
+    
+    return { macdLine, signalLine, histogram };
+  }, [calculateEMA]); // Depends on calculateEMA function
+
+  // Calculate Stochastic Oscillator
+  const calculateStochastic = useCallback((data, kPeriod = 14, dPeriod = 3) => {
+    const kValues = [];
+    const dValues = [];
+    
+    for (let i = 0; i < data.length; i++) {
+      if (i < kPeriod - 1) {
+        kValues.push(null);
+      } else {
+        const periodData = data.slice(i - kPeriod + 1, i + 1);
+        const highestHigh = Math.max(...periodData.map(item => item.high));
+        const lowestLow = Math.min(...periodData.map(item => item.low));
+        const currentClose = data[i].price;
+        
+        const k = parseFloat(((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100).toFixed(2);
+        kValues.push(isNaN(parseFloat(k)) ? null : parseFloat(k));
+      }
+    }
+    
+    for (let i = 0; i < data.length; i++) {
+      if (i < kPeriod + dPeriod - 2) {
+        dValues.push(null);
+      } else {
+        const dSum = kValues.slice(i - dPeriod + 1, i + 1).filter(val => val !== null).reduce((acc, val) => acc + val, 0);
+        const validCount = kValues.slice(i - dPeriod + 1, i + 1).filter(val => val !== null).length;
+        if (validCount > 0) {
+          dValues.push(parseFloat((dSum / validCount).toFixed(2)));
+        } else {
+          dValues.push(null);
+        }
+      }
+    }
+    
+    return { k: kValues, d: dValues };
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Calculate Williams %R
+  const calculateWilliamsR = useCallback((data, period = 14) => {
+    const rValues = [];
+    
+    for (let i = 0; i < data.length; i++) {
+      if (i < period - 1) {
+        rValues.push(null);
+      } else {
+        const periodData = data.slice(i - period + 1, i + 1);
+        const highestHigh = Math.max(...periodData.map(item => item.high));
+        const lowestLow = Math.min(...periodData.map(item => item.low));
+        const currentClose = data[i].price;
+        
+        const r = parseFloat(((highestHigh - currentClose) / (highestHigh - lowestLow)) * -100).toFixed(2);
+        rValues.push(isNaN(parseFloat(r)) ? null : parseFloat(r));
+      }
+    }
+    
+    return rValues;
+  }, []); // No dependencies needed as this is pure calculation
+
+  // Main function to calculate all technical indicators
+  const calculateTechnicalIndicators = useCallback((data) => {
+    const sma = calculateSMA(data, 20);
+    const ema = calculateEMA(data, 20);
+    const rsi = calculateRSI(data, 14);
+    const bb = calculateBollingerBands(data, 20);
+    const macd = calculateMACD(data);
+    const stochastic = calculateStochastic(data);
+    const williamsR = calculateWilliamsR(data, 14);
+    
+    const result = data.map((item, index) => ({
+      ...item,
+      sma: sma[index],
+      ema: ema[index],
+      rsi: rsi[index],
+      bbUpper: bb.upper[index],
+      bbMiddle: bb.middle[index],
+      bbLower: bb.lower[index],
+      macdLine: macd.macdLine[index],
+      macdSignal: macd.signalLine[index],
+      macdHistogram: macd.histogram[index],
+      stochK: stochastic.k[index],
+      stochD: stochastic.d[index],
+      williamsR: williamsR[index]
+    }));
+    
+    return result;
+  }, [calculateSMA, calculateEMA, calculateRSI, calculateBollingerBands, calculateMACD, calculateStochastic, calculateWilliamsR]);
+
+  // Function to get explanation for each indicator
+  const getIndicatorExplanation = useCallback((indicator) => {
+    switch(indicator) {
+      case 'sma':
+        return t.smaExplanation || "Simple Moving Average (SMA) smooths price data by creating a constantly updated average price over a specific time period, helping to identify trend direction and potential support/resistance levels.";
+      case 'ema':
+        return t.emaExplanation || "Exponential Moving Average (EMA) gives more weight to recent prices, making it more responsive to new information compared to SMA, useful for identifying trend changes more quickly.";
+      case 'rsi':
+        return t.rsiExplanation || "Relative Strength Index (RSI) measures the speed and change of price movements, ranging from 0 to 100. Values above 70 indicate overbought conditions, while values below 30 indicate oversold conditions.";
+      case 'bollinger':
+        return t.bollingerExplanation || "Bollinger Bands consist of a middle SMA band and two outer bands that are typically 2 standard deviations away from the SMA. They help identify periods of high or low volatility and potential reversal points.";
+      case 'macd':
+        return t.macdExplanation || "Moving Average Convergence Divergence (MACD) shows the relationship between two EMAs of different periods. It consists of the MACD line, signal line, and histogram, useful for identifying trend changes and momentum shifts.";
+      case 'stochastic':
+        return t.stochasticExplanation || "Stochastic Oscillator compares a security's closing price to its price range over a given time period. It ranges from 0 to 100 and helps identify overbought (above 80) and oversold (below 20) conditions.";
+      case 'williamsR':
+        return t.williamsRExplanation || "Williams %R is a momentum indicator similar to the Stochastic Oscillator, but inverted. It ranges from -100 to 0, where values above -20 indicate overbought conditions and below -80 indicate oversold conditions.";
+      default:
+        return t.generalExplanation || "Technical indicators help traders make informed decisions by analyzing price movements, trends, and market sentiment. Use multiple indicators together for better accuracy.";
+    }
+  }, [t]); // Memoize this function to prevent recreation on each render
+
+  // Initialize dashboard data
+  useEffect(() => {
+    let isMounted = true; // Track if component is still mounted
+    
+    const initializeDashboard = async () => {
+      // Generate sample chart data with technical indicators
+      const data = [];
+      let cumulativePrice = 150;
+      
+      for (let i = 0; i < 50; i++) {
+        // Simulate realistic price movement with more volatility
+        const volatility = 0.02; // 2% volatility
+        const drift = 0.0005; // Small upward drift
+        const change = (Math.random() * 2 - 1) * volatility * cumulativePrice + drift * cumulativePrice; // Random change based on current price
+        cumulativePrice = Math.max(0.01, cumulativePrice + change); // Prevent negative prices
+        
+        // Calculate high and low based on the price movement
+        const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+        const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+        
+        data.push({
+          time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}), // Realistic timestamps
+          price: parseFloat(cumulativePrice.toFixed(2)),
+          volume: Math.floor(Math.random() * 1000000) + 500000, // Random volume
+          high: parseFloat(high.toFixed(2)),
+          low: parseFloat(low.toFixed(2)),
+          open: i > 0 ? data[i-1].price : parseFloat(cumulativePrice.toFixed(2))
+        });
+      }
+      
+      // Calculate technical indicators
+      const updatedData = calculateTechnicalIndicators(data);
+      
+      // Only update state if component is still mounted
+      if (isMounted) {
+        setChartData(prevData => {
+          // Only update if the new data is different
+          if (JSON.stringify(prevData) !== JSON.stringify(updatedData)) {
+            return updatedData;
+          }
+          return prevData; // Return previous data if no change
+        });
+      }
+
+      // Fetch AI signals for popular assets
+      try {
+        const response = await getPopularAISignals();
+        if (response.data && response.data.popular_signals) {
+          const signals = Object.entries(response.data.popular_signals).map(([symbol, signalData], index) => {
+            if (!signalData.error) {
+              return {
+                id: index + 1,
+                asset: symbol,
+                signal: signalData.signal.toUpperCase(),
+                confidence: signalData.confidence,
+                reason: signalData.recommendation.split('.')[0] || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
+                technicalAnalysis: signalData.recommendation || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
+                indicators: ['Technical Analysis', 'Machine Learning', 'Pattern Recognition'],
+                targetPrice: signalData.price * (signalData.signal === 'buy' ? 1.05 : signalData.signal === 'sell' ? 0.95 : 1.02),
+                stopLoss: signalData.price * (signalData.signal === 'buy' ? 0.98 : signalData.signal === 'sell' ? 1.02 : 0.99),
+                timeFrame: signalData.timeframe || 'Short-term (1-3 days)'
+              };
+            }
+            return null; // Skip assets with errors
+          }).filter(Boolean); // Remove null entries
+                
+          // Only update state if component is still mounted
+          if (isMounted) {
+            setAiSignals(signals);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching AI signals:', error);
+              
+        // Fallback to initial signals if API fails
+        const initialSignals = [
+          { 
+            id: 1, 
+            asset: 'AAPL', 
+            signal: 'BUY', 
+            confidence: 85, 
+            reason: 'RSI divergence bullish',
+            technicalAnalysis: 'The Relative Strength Index shows a bullish divergence pattern with price making lower lows while RSI makes higher lows, indicating potential reversal to the upside.',
+            indicators: ['RSI', 'MACD', 'Moving Averages'],
+            targetPrice: 165.50,
+            stopLoss: 145.00,
+            timeFrame: 'Short-term (1-3 days)'
+          },
+          { 
+            id: 2, 
+            asset: 'TSLA', 
+            signal: 'SELL', 
+            confidence: 78, 
+            reason: 'Overbought conditions',
+            technicalAnalysis: 'Price is trading above the upper Bollinger Band with RSI above 70, indicating overbought conditions and potential for pullback.',
+            indicators: ['RSI', 'Bollinger Bands', 'Stochastic'],
+            targetPrice: 220.00,
+            stopLoss: 265.00,
+            timeFrame: 'Medium-term (3-7 days)'
+          },
+          { 
+            id: 3, 
+            asset: 'IAM', 
+            signal: 'BUY', 
+            confidence: 92, 
+            reason: 'Support level holding',
+            technicalAnalysis: 'Price has found strong support at the 78.00 level with increasing volume on bounce, suggesting institutional accumulation.',
+            indicators: ['Support/Resistance', 'Volume Profile', 'Moving Averages'],
+            targetPrice: 82.50,
+            stopLoss: 75.00,
+            timeFrame: 'Medium-term (1-2 weeks)'
+          },
+          { 
+            id: 4, 
+            asset: 'ATW', 
+            signal: 'HOLD', 
+            confidence: 65, 
+            reason: 'Consolidation phase',
+            technicalAnalysis: 'Price is trading in a tight range between 1240 and 1260 with low volatility, awaiting breakout direction.',
+            indicators: ['Bollinger Bands', 'ATR', 'Volume'],
+            targetPrice: 1270.0,
+            stopLoss: 1230.0,
+            timeFrame: 'Short-term (1-2 days)'
+          },
+          { 
+            id: 5, 
+            asset: 'BTC-USD', 
+            signal: 'BUY', 
+            confidence: 82, 
+            reason: 'Positive momentum',
+            technicalAnalysis: 'Cryptocurrency showing positive momentum with increased trading volume.',
+            indicators: ['Momentum', 'Volume', 'Volatility'],
+            targetPrice: 46000.00,
+            stopLoss: 42000.00,
+            timeFrame: 'Medium-term (1-2 weeks)'
+          },
+        ];
+              
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setAiSignals(initialSignals);
+        }
+      }
+          
+      // Attempt to get user's active challenge
+      // In a real implementation, you would get the logged-in user ID
+      // For demo purposes, we'll try to get an active challenge
+      // If none exists, we might need to create one
+      // Note: In a real app, you'd get the authenticated user ID from context/session
+      /* Uncomment when user auth is properly implemented
+      try {
+        const activeChallenge = await getActiveChallenge(userId); // Need to get actual user ID
+        if (activeChallenge) {
+          setChallengeId(activeChallenge.challenge_id);
+          setBalance(activeChallenge.current_balance);
+        } else {
+          // No active challenge, you might want to prompt user to create one
+          console.log('No active challenge found');
+        }
+      } catch (error) {
+        console.error('Error fetching active challenge:', error);
+      }
+      */
+      
+      // For now, continue with default challenge ID for demo purposes
+      // In a real app, this would be retrieved from user session
+      // Let's try to get the active challenge for the user
+      try {
+        // We need to get the user ID first
+        const token = localStorage.getItem('token');
+        if (token) {
+          // Attempt to get user's active challenge
+          const response = await api.get('/api/user/challenges');
+          if (response.ok) {
+            const data = await response.json();
+            const activeChallenge = data.challenges.find(challenge => 
+              challenge.status === 'active'
+            );
+            if (activeChallenge) {
+              setChallengeId(activeChallenge.challenge_id);
+              setChallengeStatus(activeChallenge.status);
+              setBalance(activeChallenge.current_balance);
+            } else {
+              // If no active challenge, try to get the latest funded challenge
+              const fundedChallenge = data.challenges.find(challenge => 
+                challenge.status === 'funded'
+              );
+              if (fundedChallenge) {
+                setChallengeId(fundedChallenge.challenge_id);
+                setChallengeStatus(fundedChallenge.status);
+                setBalance(fundedChallenge.current_balance);
+              } else {
+                // No challenge found, redirect user to create one
+                alert('No active challenge found. Please create a challenge first.');
+                window.location.href = '/pricing';
+              }
+            }
+          }
+        } else {
+          // If no token, use the default challenge ID for demo purposes
+          setChallengeId(4);
+        }
+      } catch (error) {
+        console.error('Error fetching user challenges:', error);
+        // Fallback to default challenge ID for demo
+        setChallengeId(4);
+      }
+    };
+    
+    initializeDashboard();
+    
+    // Check for community hash in URL
+    if (window.location.hash === '#community') {
+      setShowCommunitySection(true);
+    } else if (window.location.hash === '#strategies') {
+      setShowTradingStrategies(true);
+    } else if (window.location.hash === '#discussions') {
+      setShowMarketDiscussions(true);
+    } else if (window.location.hash === '#insights') {
+      setShowExpertInsights(true);
+    }
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [calculateTechnicalIndicators]); // Now that calculation functions are properly memoized, we can include it in dependencies
+
+  // Function to update balance when buying
+  const handleBuy = async () => {
+    setIsLoading(true)
+    try {
+      // Check if challenge ID is available
+      if (!challengeId) {
+        // If no challenge exists, try to create one
+        const token = localStorage.getItem('token');
+        if (token) {
+          // Get user profile to get user ID
+          try {
+            const profileResponse = await api.get('/profile');
+            if (profileResponse.data && profileResponse.data.user) {
+              const userId = profileResponse.data.user.id;
+              
+              // Create a new challenge
+              const createResponse = await api.post('/challenge/create', { user_id: userId });
+              if (createResponse.data && createResponse.data.challenge_id) {
+                setChallengeId(createResponse.data.challenge_id);
+                setChallengeStatus(createResponse.data.status);
+                setBalance(createResponse.data.current_balance);
+                alert('New challenge created successfully!');
+              } else {
+                alert('Failed to create challenge. Please create a challenge first.');
+                setIsLoading(false)
+                return;
+              }
+            } else {
+              alert('Unable to retrieve user profile. Please login again.');
+              setIsLoading(false)
+              return;
+            }
+          } catch (error) {
+            console.error('Error creating challenge:', error);
+            alert('Error creating challenge. Please create a challenge first.');
+            setIsLoading(false)
+            return;
+          }
+        } else {
+          // No token, redirect to login
+          alert('Please login to create a challenge.');
+          window.location.href = '/login';
+          setIsLoading(false)
+          return;
+        }
+      }
+      
+      // Verify challenge is active before proceeding
+      try {
+        // Check if challengeId is valid before making API call
+        if (!challengeId || isNaN(challengeId)) {
+          alert('Invalid challenge ID. Please create a challenge first.');
+          setIsLoading(false)
+          return;
+        }
+        
+        const challengeResponse = await getChallenge(challengeId);
+        if (challengeResponse && challengeResponse.data && challengeResponse.data.status !== 'active') {
+          if (challengeResponse.data.status === 'funded') {
+            alert(`Congratulations! Your challenge has been successfully funded with ${((challengeResponse.data.current_balance - challengeResponse.data.initial_balance) / challengeResponse.data.initial_balance * 100).toFixed(2)}% profit. You can no longer trade on this challenge, but you can create a new challenge to continue trading.`);
+          } else if (challengeResponse.data.status === 'failed') {
+            alert(`Cannot perform trade: Challenge has failed. You can create a new challenge to continue trading.`);
+          } else {
+            alert(`Cannot perform trade: Challenge is ${challengeResponse.data.status}. Only active challenges can accept trades.`);
+          }
+          setIsLoading(false)
+          setChallengeStatus(challengeResponse.data.status);
+          return;
+        }
+        // Update challenge status in state
+        if (challengeResponse && challengeResponse.data) {
+          setChallengeStatus(challengeResponse.data.status);
+        }
+      } catch (error) {
+        console.error('Error checking challenge status:', error);
+        // Check if the error is due to a 404 (not found) or other specific error
+        if (error.response && error.response.status === 404) {
+          alert('Challenge not found. Please create a new challenge.');
+          window.location.href = '/pricing';
+        } else {
+          alert('Error verifying challenge status. Please try again. If the problem persists, check if you have an active challenge.');
+        }
+        setIsLoading(false)
+        return;
+      }
+      
+      // Create the trade - balance will be updated on the backend based on profit/loss calculation
+      const tradeResponse = await createTrade({
+        challenge_id: challengeId,
+        asset_name: selectedAsset,
+        entry_price: currentPrice,
+        type: 'buy',
+        quantity: tradeSize
+      });
+      
+      // Update local state with the new balance from the response
+      setBalance(tradeResponse.data.current_balance);
+      
+      // Check if challenge status changed
+      if (tradeResponse.data.challenge_status !== 'active') {
+        alert(`Challenge status changed to: ${tradeResponse.data.challenge_status.toUpperCase()}!`);
+      }
+      
+      alert(`${t.purchaseSuccess.replace('{asset}', selectedAsset)}`);
+    } catch (error) {
+      console.error(t.purchaseError, error);
+      // Provide more specific error feedback
+      if (error.response && error.response.status === 400) {
+        alert('Cannot perform trade: Challenge may be inactive or failed');
+      } else if (error.response && error.response.status === 404) {
+        alert('Challenge not found. Please create a new challenge.');
+      } else {
+        alert(t.purchaseRetry);
+      }
+    }
+    setIsLoading(false)
+  };
+
+  // Function to update balance when selling
+  const handleSell = async () => {
+    setIsLoading(true)
+    try {
+      // Check if challenge ID is available
+      if (!challengeId) {
+        // If no challenge exists, try to create one
+        const token = localStorage.getItem('token');
+        if (token) {
+          // Get user profile to get user ID
+          try {
+            const profileResponse = await api.get('/profile');
+            if (profileResponse.data && profileResponse.data.user) {
+              const userId = profileResponse.data.user.id;
+              
+              // Create a new challenge
+              const createResponse = await api.post('/challenge/create', { user_id: userId });
+              if (createResponse.data && createResponse.data.challenge_id) {
+                setChallengeId(createResponse.data.challenge_id);
+                setChallengeStatus(createResponse.data.status);
+                setBalance(createResponse.data.current_balance);
+                alert('New challenge created successfully!');
+              } else {
+                alert('Failed to create challenge. Please create a challenge first.');
+                setIsLoading(false)
+                return;
+              }
+            } else {
+              alert('Unable to retrieve user profile. Please login again.');
+              setIsLoading(false)
+              return;
+            }
+          } catch (error) {
+            console.error('Error creating challenge:', error);
+            alert('Error creating challenge. Please create a challenge first.');
+            setIsLoading(false)
+            return;
+          }
+        } else {
+          // No token, redirect to login
+          alert('Please login to create a challenge.');
+          window.location.href = '/login';
+          setIsLoading(false)
+          return;
+        }
+      }
+      
+      // Verify challenge is active before proceeding
+      try {
+        // Check if challengeId is valid before making API call
+        if (!challengeId || isNaN(challengeId)) {
+          alert('Invalid challenge ID. Please create a challenge first.');
+          setIsLoading(false)
+          return;
+        }
+        
+        const challengeResponse = await getChallenge(challengeId);
+        if (challengeResponse && challengeResponse.data && challengeResponse.data.status !== 'active') {
+          if (challengeResponse.data.status === 'funded') {
+            alert(`Congratulations! Your challenge has been successfully funded with ${((challengeResponse.data.current_balance - challengeResponse.data.initial_balance) / challengeResponse.data.initial_balance * 100).toFixed(2)}% profit. You can no longer trade on this challenge, but you can create a new challenge to continue trading.`);
+          } else if (challengeResponse.data.status === 'failed') {
+            alert(`Cannot perform trade: Challenge has failed. You can create a new challenge to continue trading.`);
+          } else {
+            alert(`Cannot perform trade: Challenge is ${challengeResponse.data.status}. Only active challenges can accept trades.`);
+          }
+          setIsLoading(false)
+          setChallengeStatus(challengeResponse.data.status);
+          return;
+        }
+        // Update challenge status in state
+        if (challengeResponse && challengeResponse.data) {
+          setChallengeStatus(challengeResponse.data.status);
+        }
+      } catch (error) {
+        console.error('Error checking challenge status:', error);
+        // Check if the error is due to a 404 (not found) or other specific error
+        if (error.response && error.response.status === 404) {
+          alert('Challenge not found. Please create a new challenge.');
+          window.location.href = '/pricing';
+        } else {
+          alert('Error verifying challenge status. Please try again. If the problem persists, check if you have an active challenge.');
+        }
+        setIsLoading(false)
+        return;
+      }
+      
+      // Create the trade - balance will be updated on the backend based on profit/loss calculation
+      const tradeResponse = await createTrade({
+        challenge_id: challengeId,
+        asset_name: selectedAsset,
+        entry_price: currentPrice,
+        type: 'sell',
+        quantity: tradeSize
+      });
+      
+      // Update local state with the new balance from the response
+      setBalance(tradeResponse.data.current_balance);
+      
+      // Check if challenge status changed
+      if (tradeResponse.data.challenge_status !== 'active') {
+        alert(`Challenge status changed to: ${tradeResponse.data.challenge_status.toUpperCase()}!`);
+      }
+      
+      alert(`${t.saleSuccess.replace('{asset}', selectedAsset)}`);
+    } catch (error) {
+      console.error(t.saleError, error);
+      // Provide more specific error feedback
+      if (error.response && error.response.status === 400) {
+        alert('Cannot perform trade: Challenge may be inactive or failed');
+      } else if (error.response && error.response.status === 404) {
+        alert('Challenge not found. Please create a new challenge.');
+      } else {
+        alert(t.saleRetry);
+      }
+    }
+    setIsLoading(false)
+  };
+
+  // State for tracking price updates
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
+  const [priceUpdateStatus, setPriceUpdateStatus] = useState({}); // Track update status for each asset
+  
+  // Function to fetch real-time price with visual indicators
+  const fetchPrice = useCallback(async (asset) => {
+    try {
+      const response = await getPrice(asset);
+      if (response.data.price && !response.data.error) {
+        const newPrice = parseFloat(response.data.price);
+        
+        // Update price state
+        setCurrentPrice(prevPrice => {
+          // Set visual indicator when price updates
+          if (prevPrice !== newPrice) {
+            setPriceUpdateStatus(prev => ({
+              ...prev,
+              [asset]: { updated: true, timestamp: new Date() }
+            }));
+            
+            // Reset visual indicator after 1 second
+            setTimeout(() => {
+              setPriceUpdateStatus(prev => ({
+                ...prev,
+                [asset]: { updated: false, timestamp: prev[asset]?.timestamp || new Date() }
+              }));
+            }, 1000);
+            
+            setLastUpdateTime(new Date());
+          }
+          return prevPrice !== newPrice ? newPrice : prevPrice;
+        });
+      }
+    } catch (error) {
+      console.error(t.fetchPriceError || 'Erreur lors de la récupération du prix:', error);
+      console.error('Full error details:', error);
+    }
+  }, [getPrice]); // Removed t from dependencies to avoid unnecessary re-renders
+
+  // Update price periodically with configurable interval (10-60 seconds)
+  useEffect(() => {
+    if (!selectedAsset) return; // Don't start interval if no asset selected
+    
+    let isMounted = true;
+    
+    // Determine appropriate interval based on asset type
+    let updateInterval;
+    if (selectedAsset === 'BTC-USD' || selectedAsset === 'IAM') {
+      // Update BTC-USD and IAM every 10-25 seconds for better visibility
+      updateInterval = Math.floor(Math.random() * 16) + 10; // Between 10-25 seconds
+    } else {
+      // Other assets update every 15-60 seconds
+      updateInterval = Math.floor(Math.random() * 46) + 15; // Between 15-60 seconds
+    }
+    
+    const interval = setInterval(() => {
+      if (isMounted) {
+        fetchPrice(selectedAsset);
+      }
+    }, updateInterval * 1000); // Convert to milliseconds
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset, fetchPrice]); // This dependency array is correct
+  
+  // Update all prices automatically in the background
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      if (isMounted) {
+        try {
+          // Fetch prices for all assets
+          const allSymbols = assets.map(asset => asset.symbol);
+          const response = await getMultiplePrices(allSymbols);
+          
+          if (response.data && response.data.prices) {
+            // Update the current price if the selected asset price has changed
+            const selectedAssetPrice = response.data.prices[selectedAsset];
+            if (selectedAssetPrice && selectedAssetPrice.price && !selectedAssetPrice.error) {
+              setCurrentPrice(prevPrice => {
+                const newPrice = parseFloat(selectedAssetPrice.price);
+                return prevPrice !== newPrice ? newPrice : prevPrice;
+              });
+            }
+            
+            // Update chart data for all assets periodically
+            setChartData(prevData => {
+              if (!prevData || prevData.length === 0) return prevData;
+              
+              // Add small random fluctuations to existing data to simulate market activity
+              return prevData.map(point => {
+                // Calculate a small random change based on current price
+                const changePercent = (Math.random() - 0.5) * 0.005; // ±0.25%
+                const newPrice = point.price * (1 + changePercent);
+                
+                return {
+                  ...point,
+                  price: parseFloat(newPrice.toFixed(2)),
+                  high: Math.max(point.high, newPrice * (1 + Math.random() * 0.002)),
+                  low: Math.min(point.low, newPrice * (1 - Math.random() * 0.002)),
+                  time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})
+                };
+              });
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching all prices:', error);
+        }
+      }
+    }, 5000); // Update all prices every 5 seconds
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [assets, selectedAsset]); // Refresh all prices in the background
+  
+  // Update AI signals automatically in the background
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      if (isMounted) {
+        try {
+          const response = await getPopularAISignals();
+          if (response.data && response.data.popular_signals) {
+            const signals = Object.entries(response.data.popular_signals).map(([symbol, signalData], index) => {
+              if (!signalData.error) {
+                return {
+                  id: index + 1,
+                  asset: symbol,
+                  signal: signalData.signal.toUpperCase(),
+                  confidence: signalData.confidence,
+                  reason: signalData.recommendation.split('.')[0] || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
+                  technicalAnalysis: signalData.recommendation || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
+                  indicators: ['Technical Analysis', 'Machine Learning', 'Pattern Recognition'],
+                  targetPrice: signalData.price * (signalData.signal === 'buy' ? 1.05 : signalData.signal === 'sell' ? 0.95 : 1.02),
+                  stopLoss: signalData.price * (signalData.signal === 'buy' ? 0.98 : signalData.signal === 'sell' ? 1.02 : 0.99),
+                  timeFrame: signalData.timeframe || 'Short-term (1-3 days)'
+                };
+              }
+              return null; // Skip assets with errors
+            }).filter(Boolean); // Remove null entries
+            
+            if (isMounted) {
+              setAiSignals(signals);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching AI signals:', error);
+        }
+      }
+    }, 30000); // Update AI signals every 30 seconds
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []); // Refresh AI signals in the background
+
+  // Handle chart data updates with proper cleanup
+  useEffect(() => {
+    // This effect manages chart data updates
+    // Ensure data is properly formatted before updating
+    if (chartData && chartData.length > 0) {
+      // Data is ready for chart rendering
+    }
+    
+    // Cleanup function
+    return () => {};
+  }, [chartData]);
+  
+  // Update chart data automatically when prices change
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(() => {
+      if (isMounted && selectedAsset) {
+        // Update chart data by fetching new price data
+        const updateChartData = async () => {
+          try {
+            // Get the latest price for the selected asset
+            const priceResponse = await getPrice(selectedAsset);
+            
+            if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+              const newPrice = parseFloat(priceResponse.data.price);
+              
+              setChartData(prevData => {
+                if (!prevData || prevData.length === 0) return prevData;
+                
+                // Create new chart data with the updated price
+                let newData = [...prevData];
+                
+                // Add new data point with the current price and time
+                const newPoint = {
+                  time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                  price: newPrice,
+                  volume: Math.floor(Math.random() * 1000000) + 500000, // Random volume
+                  high: Math.max(newPrice, prevData[prevData.length - 1].high * 0.995), // Slightly adjusted high
+                  low: Math.min(newPrice, prevData[prevData.length - 1].low * 1.005), // Slightly adjusted low
+                  open: prevData[prevData.length - 1].price
+                };
+                
+                // Maintain only the last 50 data points to prevent chart overcrowding
+                newData.push(newPoint);
+                if (newData.length > 50) {
+                  newData = newData.slice(-50);
+                }
+                
+                // Calculate technical indicators for the updated data
+                return calculateTechnicalIndicators(newData);
+              });
+            }
+          } catch (error) {
+            console.error('Error updating chart data:', error);
+          }
+        };
+        
+        updateChartData();
+      }
+    }, 2000); // Update chart data every 2 seconds for more dynamic updates
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset, calculateTechnicalIndicators]); // Update chart data automatically
+  
+  // Memoize the chart data processing to prevent unnecessary re-renders
+  const processedChartData = useMemo(() => {
+    if (!chartData || chartData.length === 0) return [];
+    return [...chartData]; // Create a new array to ensure proper re-rendering when needed
+  }, [chartData]); // Correct dependency for this useMemo
+
+
+  // Scroll to community section when shown
+  useEffect(() => {
+    if (showCommunitySection && communityRef.current) {
+      communityRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else if (showTradingStrategies && strategiesRef.current) {
+      strategiesRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else if (showMarketDiscussions && discussionsRef.current) {
+      discussionsRef.current.scrollIntoView({ behavior: 'smooth' });
+    } else if (showExpertInsights && insightsRef.current) {
+      insightsRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showCommunitySection, showTradingStrategies, showMarketDiscussions, showExpertInsights]); // Dependencies are correct for this effect
+
+  return (
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        {t.tradingDashboard}
+      </Typography>
+      
+      {/* Fetch and display current challenge status */}
+      {challengeId && (
+        <Alert 
+          severity={
+            challengeStatus === 'failed' ? 'error' : 
+            challengeStatus === 'funded' ? 'success' : 
+            'info'
+          } 
+          sx={{ 
+            mb: 3,
+            border: challengeStatus === 'failed' ? '3px solid #f44336' : 
+                  challengeStatus === 'funded' ? '3px solid #4caf50' : 
+                  '1px solid #9e9e9e',
+            boxShadow: challengeStatus === 'failed' ? '0 0 20px rgba(244, 67, 54, 0.5)' : 
+                       challengeStatus === 'funded' ? '0 0 20px rgba(76, 175, 80, 0.5)' : 
+                       'none',
+            animation: challengeStatus === 'failed' ? 'shake 0.5s ease-in-out' : 'none',
+            '@keyframes shake': {
+              '0%, 100%': { transform: 'translateX(0)' },
+              '25%': { transform: 'translateX(-5px)' },
+              '75%': { transform: 'translateX(5px)' },
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h6" component="div" gutterBottom>
+                {challengeStatus === 'failed' && (
+                  <span style={{ color: '#f44336', fontWeight: 'bold', fontSize: '1.2em' }}>⚠️ CHALLENGE FAILED ⚠️</span>
+                )}
+                {challengeStatus === 'funded' && (
+                  <span style={{ color: '#4caf50', fontWeight: 'bold', fontSize: '1.2em' }}>🎉 CHALLENGE FUNDED 🎉</span>
+                )}
+                {challengeStatus === 'active' && (
+                  <span style={{ color: '#2196f3', fontWeight: 'bold', fontSize: '1.2em' }}>📊 ACTIVE CHALLENGE</span>
+                )}
+              </Typography>
+              <div>
+                {t.challengeBalance}: <strong>{balance.toFixed(2)} USD</strong> | {t.selectedAsset}: <strong>{selectedAsset}</strong> | {t.currentPrice}: <strong>${currentPrice.toFixed(2)}</strong>
+                <br />
+                {/* Display additional challenge details */}
+                <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
+                  Challenge ID: <strong>{challengeId}</strong> | Status: <strong>{challengeStatus.toUpperCase()}</strong> | 
+                  Change: <strong>{((balance - 5000) / 5000 * 100).toFixed(2)}%</strong>
+                </div>
+                {priceUpdateStatus[selectedAsset] && (
+                  <Typography 
+                    variant="caption" 
+                    color={priceUpdateStatus[selectedAsset].updated ? 'success.main' : 'text.secondary'}
+                    sx={{
+                      fontWeight: priceUpdateStatus[selectedAsset].updated ? 'bold' : 'normal',
+                      animation: priceUpdateStatus[selectedAsset].updated ? 'pulse 0.5s' : 'none',
+                      '@keyframes pulse': {
+                        '0%': { transform: 'scale(1)' },
+                        '50%': { transform: 'scale(1.1)' },
+                        '100%': { transform: 'scale(1)' },
+                      }
+                    }}
+                  >
+                    {t.lastUpdated}: {priceUpdateStatus[selectedAsset].timestamp ? new Date(priceUpdateStatus[selectedAsset].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : ''}
+                  </Typography>
+                )}
+              </div>
+            </Box>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              onClick={() => window.location.href = '/trade-history'}
+            >
+              {t.viewTradeHistory || 'View Trade History'}
+            </Button>
+          </Box>
+        </Alert>
+      )}
+      {!challengeId && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          <Typography variant="h6" component="div" gutterBottom>
+            ⚠️ NO ACTIVE CHALLENGE ⚠️
+          </Typography>
+          <div>
+            {t.challengeBalance}: <strong>{balance.toFixed(2)} USD</strong> | {t.selectedAsset}: <strong>{selectedAsset}</strong> | {t.currentPrice}: <strong>${currentPrice.toFixed(2)}</strong>
+            <br />
+            <Button 
+              variant="contained" 
+              color="primary" 
+              sx={{ mt: 1 }}
+              onClick={() => window.location.href = '/pricing'}
+            >
+              {t.createChallenge || 'Create Challenge'}
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      <Grid container spacing={3}>
+        {/* Chart Area */}
+        <Grid item xs={12} lg={9}>
+          <StyledPaper elevation={3} sx={{ backgroundColor: 'rgba(0, 0, 0, 0.02)', minHeight: '600px' }}>
+            <Typography variant="h6" gutterBottom>
+              {t.priceChart} - {selectedAsset}
+            </Typography>
+            <Box height={400}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={processedChartData}
+                  key={`chart-${selectedAsset}-${processedChartData.length}`}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="time" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line 
+                    type="monotone" 
+                    dataKey="price" 
+                    stroke="#8884d8" 
+                    strokeWidth={2}
+                    dot={false}
+                    name={t.price} 
+                  />
+                  {showBollinger && (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="bbUpper" 
+                        stroke="#ff6384" 
+                        strokeDasharray="3 3"
+                        dot={false}
+                        name="BB Upper" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="bbMiddle" 
+                        stroke="#ff6384" 
+                        dot={false}
+                        name="BB Middle" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="bbLower" 
+                        stroke="#ff6384" 
+                        strokeDasharray="3 3"
+                        dot={false}
+                        name="BB Lower" 
+                      />
+                    </>
+                  )}
+                  {selectedIndicator === 'sma' && (
+                    <Line 
+                      type="monotone" 
+                      dataKey="sma" 
+                      stroke="#00c49f" 
+                      strokeWidth={2}
+                      dot={false}
+                      name={`SMA ${indicatorPeriod}`} 
+                    />
+                  )}
+                  {selectedIndicator === 'ema' && (
+                    <Line 
+                      type="monotone" 
+                      dataKey="ema" 
+                      stroke="#ffc658" 
+                      strokeWidth={2}
+                      dot={false}
+                      name={`EMA ${indicatorPeriod}`} 
+                    />
+                  )}
+                  {showRSI && (
+                    <>
+                      <ReferenceLine 
+                        y={70} 
+                        stroke="#ff6b6b" 
+                        strokeDasharray="3 3" 
+                        label="Overbought" 
+                      />
+                      <ReferenceLine 
+                        y={30} 
+                        stroke="#4ecdc4" 
+                        strokeDasharray="3 3" 
+                        label="Oversold" 
+                      />
+                    </>
+                  )}
+                  
+                  {showMACD && (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="macdLine" 
+                        stroke="#ff6b6b" 
+                        strokeWidth={2}
+                        dot={false}
+                        name="MACD" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="macdSignal" 
+                        stroke="#4ecdc4" 
+                        strokeWidth={2}
+                        dot={false}
+                        name="Signal" 
+                      />
+                      <ReferenceLine y={0} stroke="#ccc" strokeDasharray="2 2" />
+                    </>
+                  )}
+                  
+                  {showStochastic && (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="stochK" 
+                        stroke="#ff9f43" 
+                        strokeWidth={2}
+                        dot={false}
+                        name="%K" 
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="stochD" 
+                        stroke="#26de81" 
+                        strokeWidth={2}
+                        dot={false}
+                        name="%D" 
+                      />
+                      <ReferenceLine y={80} stroke="#ff6b6b" strokeDasharray="3 3" />
+                      <ReferenceLine y={20} stroke="#4ecdc4" strokeDasharray="3 3" />
+                    </>
+                  )}
+                  
+                  {showWilliamsR && (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="williamsR" 
+                        stroke="#fd79a8" 
+                        strokeWidth={2}
+                        dot={false}
+                        name="%R" 
+                      />
+                      <ReferenceLine y={-20} stroke="#ff6b6b" strokeDasharray="3 3" />
+                      <ReferenceLine y={-80} stroke="#4ecdc4" strokeDasharray="3 3" />
+                    </>
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </Box>
+            
+            {/* Asset Selection */}
+            <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              <Typography variant="subtitle1" gutterBottom>
+                {t.selectAsset}:
+              </Typography>
+              <Button 
+                variant={selectedAsset === 'AAPL' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('AAPL'); 
+                  fetchPrice('AAPL'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('AAPL');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for AAPL
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for AAPL:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                AAPL
+              </Button>
+              <Button 
+                variant={selectedAsset === 'TSLA' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('TSLA'); 
+                  fetchPrice('TSLA'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('TSLA');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for TSLA
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for TSLA:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                TSLA
+              </Button>
+              <Button 
+                variant={selectedAsset === 'IAM' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('IAM'); 
+                  fetchPrice('IAM'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('IAM');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for IAM
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for IAM:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                IAM
+              </Button>
+              <Button 
+                variant={selectedAsset === 'ATW' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('ATW'); 
+                  fetchPrice('ATW'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('ATW');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for ATW
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for ATW:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                ATW
+              </Button>
+              <Button 
+                variant={selectedAsset === 'MSFT' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('MSFT'); 
+                  fetchPrice('MSFT'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('MSFT');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for MSFT
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for MSFT:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                MSFT
+              </Button>
+              <Button 
+                variant={selectedAsset === 'GOOGL' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('GOOGL'); 
+                  fetchPrice('GOOGL'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('GOOGL');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for GOOGL
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for GOOGL:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                GOOGL
+              </Button>
+              <Button 
+                variant={selectedAsset === 'AMZN' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('AMZN'); 
+                  fetchPrice('AMZN'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('AMZN');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for AMZN
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for AMZN:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                AMZN
+              </Button>
+              <Button 
+                variant={selectedAsset === 'META' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('META'); 
+                  fetchPrice('META'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('META');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for META
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for META:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                META
+              </Button>
+              <Button 
+                variant={selectedAsset === 'NVDA' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('NVDA'); 
+                  fetchPrice('NVDA'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('NVDA');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for NVDA
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for NVDA:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                NVDA
+              </Button>
+              <Button 
+                variant={selectedAsset === 'NFLX' ? 'contained' : 'outlined'} 
+                onClick={() => { 
+                  setSelectedAsset('NFLX'); 
+                  fetchPrice('NFLX'); 
+                  // Fetch fresh chart data for the selected asset
+                  const fetchChartData = async () => {
+                    try {
+                      const priceResponse = await getPrice('NFLX');
+                      if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                        const initialPrice = parseFloat(priceResponse.data.price);
+                        const data = [];
+                        
+                        // Generate initial chart data for NFLX
+                        for (let i = 0; i < 50; i++) {
+                          const volatility = 0.02; // 2% volatility
+                          const drift = 0.0005; // Small upward drift
+                          const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                          const cumulativePrice = Math.max(0.01, initialPrice + change);
+                          
+                          const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                          const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                          
+                          data.push({
+                            time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                            price: parseFloat(cumulativePrice.toFixed(2)),
+                            volume: Math.floor(Math.random() * 1000000) + 500000,
+                            high: parseFloat(high.toFixed(2)),
+                            low: parseFloat(low.toFixed(2)),
+                            open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                          });
+                        }
+                        
+                        setChartData(calculateTechnicalIndicators(data));
+                      }
+                    } catch (error) {
+                      console.error('Error fetching chart data for NFLX:', error);
+                    }
+                  };
+                  fetchChartData();
+                }}
+                sx={{ m: 0.5 }}
+              >
+                NFLX
+              </Button>
+            </Box>
+            
+            {/* Technical Analysis Controls */}
+            <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'grey.300', borderRadius: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {t.technicalAnalysisControls}
+              </Typography>
+              
+              {/* Indicator Explanation */}
+              <Box sx={{ mt: 1, p: 1, backgroundColor: 'info.light', borderRadius: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {getIndicatorExplanation(selectedIndicator === 'none' ? 'general' : selectedIndicator)}
+                </Typography>
+              </Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2">{t.indicatorType}:</Typography>
+                  <select 
+                    value={selectedIndicator}
+                    onChange={(e) => setSelectedIndicator(e.target.value)}
+                    style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                  >
+                    <option value="none">{t.none}</option>
+                    <option value="sma">{t.simpleMovingAverage} (SMA)</option>
+                    <option value="ema">{t.exponentialMovingAverage} (EMA)</option>
+                    <option value="macd">{t.movingAverageConvergenceDivergence} (MACD)</option>
+                    <option value="stochastic">{t.stochasticOscillator} (STOCH)</option>
+                  </select>
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <Typography variant="body2">{t.period}:</Typography>
+                  <input 
+                    type="number" 
+                    value={indicatorPeriod}
+                    onChange={(e) => setIndicatorPeriod(parseInt(e.target.value) || 20)}
+                    min="1" max="100"
+                    style={{ width: '100%', padding: '8px', marginTop: '4px' }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showBollinger}
+                      onChange={(e) => setShowBollinger(e.target.checked)}
+                    />
+                    {t.showBollingerBands}
+                  </label>
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showRSI}
+                      onChange={(e) => setShowRSI(e.target.checked)}
+                    />
+                    {t.showRSI}
+                  </label>
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showMACD}
+                      onChange={(e) => setShowMACD(e.target.checked)}
+                    />
+                    {t.showMACD}
+                  </label>
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showStochastic}
+                      onChange={(e) => setShowStochastic(e.target.checked)}
+                    />
+                    {t.showStochastic}
+                  </label>
+                </Grid>
+                
+                <Grid item xs={12} sm={6} md={3}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={showWilliamsR}
+                      onChange={(e) => setShowWilliamsR(e.target.checked)}
+                    />
+                    {t.showWilliamsR}
+                  </label>
+                </Grid>
+              </Grid>
+            </Box>
+            
+            {/* Stock Performance Summary */}
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {t.stockPerformance}
+              </Typography>
+              <Grid container spacing={1}>
+                {assets.map((asset, index) => (
+                  <Grid item xs={6} sm={4} md={2} key={asset.symbol}>
+                    <Paper 
+                      sx={{ 
+                        p: 1, 
+                        textAlign: 'center', 
+                        border: selectedAsset === asset.symbol ? '2px solid' : '1px solid',
+                        borderColor: selectedAsset === asset.symbol ? 'primary.main' : 'divider',
+                        backgroundColor: selectedAsset === asset.symbol ? 'action.selected' : 'background.paper',
+                        cursor: 'pointer',
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                        }
+                      }}
+                      onClick={() => { 
+                        setSelectedAsset(asset.symbol); 
+                        fetchPrice(asset.symbol); 
+                        // Fetch fresh chart data for the selected asset
+                        const fetchChartData = async () => {
+                          try {
+                            const priceResponse = await getPrice(asset.symbol);
+                            if (priceResponse.data && priceResponse.data.price && !priceResponse.data.error) {
+                              const initialPrice = parseFloat(priceResponse.data.price);
+                              const data = [];
+                                                  
+                              // Generate initial chart data for the selected asset
+                              for (let i = 0; i < 50; i++) {
+                                const volatility = 0.02; // 2% volatility
+                                const drift = 0.0005; // Small upward drift
+                                const change = (Math.random() * 2 - 1) * volatility * initialPrice + drift * initialPrice;
+                                const cumulativePrice = Math.max(0.01, initialPrice + change);
+                                                    
+                                const high = Math.max(cumulativePrice, cumulativePrice * (1 + Math.random() * 0.015));
+                                const low = Math.min(cumulativePrice, cumulativePrice * (1 - Math.random() * 0.015));
+                                                    
+                                data.push({
+                                  time: new Date(Date.now() - (49 - i) * 2000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
+                                  price: parseFloat(cumulativePrice.toFixed(2)),
+                                  volume: Math.floor(Math.random() * 1000000) + 500000,
+                                  high: parseFloat(high.toFixed(2)),
+                                  low: parseFloat(low.toFixed(2)),
+                                  open: i > 0 ? data[i-1]?.price || initialPrice : parseFloat(cumulativePrice.toFixed(2))
+                                });
+                              }
+                                                  
+                              setChartData(calculateTechnicalIndicators(data));
+                            }
+                          } catch (error) {
+                            console.error(`Error fetching chart data for ${asset.symbol}:`, error);
+                          }
+                        };
+                        fetchChartData();
+                      }}
+                    >
+                      <Typography variant="caption" display="block">
+                        {asset.symbol}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" display="block">
+                        {asset.name.split(' ')[0]}
+                      </Typography>
+                      <Typography variant="caption" color="success.main" display="block">
+                        +2.5%
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+            
+            {/* Trading Controls */}
+            <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 1 }}>
+                <Typography variant="body2" gutterBottom>
+                  Trade Size (Shares)
+                </Typography>
+                <select 
+                  value={tradeSize}
+                  onChange={(e) => setTradeSize(Number(e.target.value))}
+                  style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                >
+                  <option value={10}>10 (Default)</option>
+                  <option value={25}>25 (Medium)</option>
+                  <option value={50}>50 (Large)</option>
+                  <option value={100}>100 (Demo)</option>
+                </select>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+                <Button 
+                variant="contained" 
+                color="success" 
+                size="large" 
+                onClick={handleBuy}
+                disabled={loading}
+                sx={{
+                  minWidth: 150,
+                  fontSize: '1.2rem',
+                  padding: '12px 24px',
+                  boxShadow: 3,
+                  '&:hover': {
+                    boxShadow: 6,
+                    transform: 'translateY(-2px)'
+                  },
+                  '&:disabled': {
+                    opacity: 0.6
+                  }
+                }}
+              >
+                {t.buy} ${currentPrice.toFixed(2)}
+              </Button>
+              <Button 
+                variant="contained" 
+                color="error" 
+                size="large" 
+                onClick={handleSell}
+                disabled={loading}
+                sx={{
+                  minWidth: 150,
+                  fontSize: '1.2rem',
+                  padding: '12px 24px',
+                  boxShadow: 3,
+                  '&:hover': {
+                    boxShadow: 6,
+                    transform: 'translateY(-2px)'
+                  },
+                  '&:disabled': {
+                    opacity: 0.6
+                  }
+                }}
+              >
+                {t.sell} ${currentPrice.toFixed(2)}
+              </Button>
+            </Box>
+            </Box>
+          </StyledPaper>
+        </Grid>
+
+        {/* AI Signals Panel */}
+        <Grid item xs={12} lg={3}>
+          <StyledPaper elevation={3} sx={{ backgroundColor: 'rgba(0, 0, 0, 0.02)', minHeight: '600px' }}>
+            <Typography variant="h6" gutterBottom>
+              {t.realTimeAISignals}
+            </Typography>
+            
+            <List>
+              {aiSignals.map((signal) => (
+                <React.Fragment key={signal.id}>
+                  <ListItem alignItems="flex-start" onClick={() => {
+                    setDetailedSignal(signal);
+                    setShowDetailedSignal(true);
+                  }} sx={{ cursor: 'pointer', '&:hover': { backgroundColor: 'action.hover' } }}>
+                    <ListItemText
+                      primary={
+                        <>
+                          {signal.asset} - {signal.signal === 'BUY' ? (
+                            <SignalChip label={t.buy.toUpperCase()} color="success" size="small" />
+                          ) : signal.signal === 'SELL' ? (
+                            <SignalChip label={t.sell.toUpperCase()} color="error" size="small" />
+                          ) : (
+                            <SignalChip label={t.hold.toUpperCase()} color="warning" size="small" />
+                          )}
+                          <Chip 
+                            label={`Confiance: ${signal.confidence}%`} 
+                            size="small" 
+                            sx={{ ml: 1, backgroundColor: signal.confidence > 80 ? '#4caf50' : signal.confidence > 60 ? '#ff9800' : '#f44336', color: 'white' }}
+                          />
+                        </>
+                      }
+                      secondary={
+                        <React.Fragment>
+                          <Typography
+                            sx={{ display: 'inline' }}
+                            component="span"
+                            variant="body2"
+                            color="text.primary"
+                          >
+                            {t.reason}: {signal.reason}
+                          </Typography>
+                        </React.Fragment>
+                      }
+                    />
+                  </ListItem>
+                  <Divider component="li" />
+                </React.Fragment>
+              ))}
+            </List>
+            
+            {/* Detailed Signal Modal */}
+            {detailedSignal && (
+              <Dialog open={showDetailedSignal} onClose={() => {
+              setShowDetailedSignal(false);
+              setDetailedSignal(null);
+            }} maxWidth="md" fullWidth>
+                <DialogTitle>
+                  {t.realTimeAISignals} - {detailedSignal?.asset} ({detailedSignal?.signal})
+                </DialogTitle>
+                <DialogContent>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.signalDetails}
+                        </Typography>
+                        <Typography variant="body1" gutterBottom>
+                          <strong>{t.confidence}:</strong> {detailedSignal?.confidence}%
+                        </Typography>
+                        <Typography variant="body1" gutterBottom>
+                          <strong>{t.timeFrame}:</strong> {detailedSignal?.timeFrame}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.technicalAnalysis}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          {detailedSignal?.technicalAnalysis}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={6}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.targetPrice}
+                        </Typography>
+                        <Typography variant="body1" color="success.main">
+                          ${detailedSignal?.targetPrice}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={6}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.stopLoss}
+                        </Typography>
+                        <Typography variant="body1" color="error.main">
+                          ${detailedSignal?.stopLoss}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.indicatorsUsed}
+                        </Typography>
+                        <Box>
+                          {detailedSignal?.indicators?.map((indicator, index) => (
+                            <Chip 
+                              key={index}
+                              label={indicator}
+                              size="small"
+                              sx={{ mr: 1, mb: 1, backgroundColor: 'primary.main', color: 'white' }}
+                            />
+                          ))}
+                        </Box>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <Typography variant="h6" color="primary" gutterBottom>
+                          {t.action}
+                        </Typography>
+                        <Button 
+                          variant="contained" 
+                          color={detailedSignal?.signal === 'BUY' ? 'success' : detailedSignal?.signal === 'SELL' ? 'error' : 'warning'}
+                          onClick={() => {
+                            if (detailedSignal?.signal === 'BUY') {
+                              // Simulate buying the asset
+                              setSelectedAsset(detailedSignal.asset);
+                              handleBuy();
+                            } else if (detailedSignal?.signal === 'SELL') {
+                              // Simulate selling the asset
+                              setSelectedAsset(detailedSignal.asset);
+                              handleSell();
+                            }
+                            setShowDetailedSignal(false);
+                          }}
+                        >
+                          {detailedSignal?.signal === 'BUY' ? t.buy : detailedSignal?.signal === 'SELL' ? t.sell : t.hold} {detailedSignal?.asset}
+                        </Button>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => {
+                    setShowDetailedSignal(false);
+                    setDetailedSignal(null);
+                  }}>
+                    {t.close}
+                  </Button>
+                </DialogActions>
+              </Dialog>
+            )}
+            
+            <Typography variant="subtitle2" sx={{ mt: 2, fontStyle: 'italic' }}>
+              {t.signalsGeneratedByAI}
+            </Typography>
+          </StyledPaper>
+          
+          {/* Community Section */}
+          
+          {/* Trading Masterclass Section */}
+          {showTradingMasterclass && (
+            <StyledPaper elevation={6} ref={null} sx={{ mt: 3, p: 3, border: '1px solid', borderColor: 'secondary.main', borderRadius: 3, backgroundColor: '#ffffff' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" color="secondary" sx={{ mr: 1 }}>
+                  📘
+                </Typography>
+                <Typography variant="h5" fontWeight="bold" color="secondary">
+                  {t.tradingMasterclass}
+                </Typography>
+              </Box>
+              
+              <Typography variant="body1" gutterBottom sx={{ mt: 2, fontSize: '1.1rem', color: '#333', fontWeight: '500' }}>
+                {t.tradingMasterclassDesc}
+              </Typography>
+              
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: '#ffffff', border: '2px solid', borderColor: '#9c27b0', borderRadius: 2, '&:hover': { backgroundColor: '#f5f5f5' }, transition: 'all 0.3s ease-in-out', cursor: 'pointer' }} onClick={() => {
+                    setSelectedCourse({
+                      title: t.beginnerCourse,
+                      description: t.beginnerCourseDesc,
+                      duration: '4 hours',
+                      lessons: 12,
+                      level: t.beginnerLevel,
+                      topics: [t.introToTrading, t.chartPatterns, t.riskBasics]
+                    });
+                    setShowCourseDetail(true);
+                  }}>
+                    <Typography variant="h6" color="secondary" gutterBottom fontWeight="bold">
+                      {t.beginnerCourse}
+                    </Typography>
+                    <Typography variant="body2" color="#333" gutterBottom>
+                      {t.beginnerCourseDesc}
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Chip label={t.beginnerLevel} size="small" color="secondary" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="4h" size="small" color="info" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="12 {t.lessons}" size="small" color="success" sx={{ mb: 1 }} />
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: '#ffffff', border: '2px solid', borderColor: '#2196f3', borderRadius: 2, '&:hover': { backgroundColor: '#f5f5f5' }, transition: 'all 0.3s ease-in-out', cursor: 'pointer' }} onClick={() => {
+                    setSelectedCourse({
+                      title: t.advancedCourse,
+                      description: t.advancedCourseDesc,
+                      duration: '6 hours',
+                      lessons: 18,
+                      level: t.advancedLevel,
+                      topics: [t.technicalAnalysis, t.algorithmicTrading, t.portfolioManagement]
+                    });
+                    setShowCourseDetail(true);
+                  }}>
+                    <Typography variant="h6" color="primary" gutterBottom fontWeight="bold">
+                      {t.advancedCourse}
+                    </Typography>
+                    <Typography variant="body2" color="#333" gutterBottom>
+                      {t.advancedCourseDesc}
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Chip label={t.advancedLevel} size="small" color="primary" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="6h" size="small" color="info" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="18 {t.lessons}" size="small" color="success" sx={{ mb: 1 }} />
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: '#ffffff', border: '2px solid', borderColor: '#4caf50', borderRadius: 2, '&:hover': { backgroundColor: '#f5f5f5' }, transition: 'all 0.3s ease-in-out', cursor: 'pointer' }} onClick={() => {
+                    setSelectedCourse({
+                      title: t.expertCourse,
+                      description: t.expertCourseDesc,
+                      duration: '8 hours',
+                      lessons: 24,
+                      level: t.expertLevel,
+                      topics: [t.quantitativeAnalysis, t.riskManagement, t.momentumTrading]
+                    });
+                    setShowCourseDetail(true);
+                  }}>
+                    <Typography variant="h6" color="success" gutterBottom fontWeight="bold">
+                      {t.expertCourse}
+                    </Typography>
+                    <Typography variant="body2" color="#333" gutterBottom>
+                      {t.expertCourseDesc}
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Chip label={t.expertLevel} size="small" color="success" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="8h" size="small" color="info" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="24 {t.lessons}" size="small" color="success" sx={{ mb: 1 }} />
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: '#ffffff', border: '2px solid', borderColor: '#ff9800', borderRadius: 2, '&:hover': { backgroundColor: '#f5f5f5' }, transition: 'all 0.3s ease-in-out', cursor: 'pointer' }} onClick={() => {
+                    setSelectedCourse({
+                      title: t.specializedCourse,
+                      description: t.specializedCourseDesc,
+                      duration: '5 hours',
+                      lessons: 15,
+                      level: t.intermediateLevel,
+                      topics: [t.forexTrading, t.optionsStrategy, t.cryptoMarkets]
+                    });
+                    setShowCourseDetail(true);
+                  }}>
+                    <Typography variant="h6" color="secondary" gutterBottom fontWeight="bold">
+                      {t.specializedCourse}
+                    </Typography>
+                    <Typography variant="body2" color="#333" gutterBottom>
+                      {t.specializedCourseDesc}
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Chip label={t.intermediateLevel} size="small" color="warning" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="5h" size="small" color="info" sx={{ mr: 1, mb: 1 }} />
+                      <Chip label="15 {t.lessons}" size="small" color="success" sx={{ mb: 1 }} />
+                    </Box>
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Button variant="contained" color="secondary" sx={{ backgroundColor: '#9c27b0', '&:hover': { backgroundColor: '#7b1fa2' } }} onClick={() => setShowTradingMasterclass(false)}>
+                  {t.hideMasterclass}
+                </Button>
+              </Box>
+            </StyledPaper>
+          )}
+          
+          {/* Course Detail Modal */}
+          {selectedCourse && showCourseDetail && (
+            <Dialog open={showCourseDetail} onClose={() => {
+              setShowCourseDetail(false);
+              setSelectedCourse(null);
+            }} maxWidth="md" fullWidth>
+              <DialogTitle>
+                {selectedCourse.title}
+              </DialogTitle>
+              <DialogContent>
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body1" gutterBottom>
+                    {selectedCourse.description}
+                  </Typography>
+                  
+                  <Grid container spacing={2} sx={{ mt: 1 }}>
+                    <Grid item xs={6}>
+                      <Typography variant="h6" color="primary" gutterBottom>
+                        {t.courseDetails}
+                      </Typography>
+                      <Typography variant="body2" gutterBottom>
+                        <strong>{t.duration}:</strong> {selectedCourse.duration}
+                      </Typography>
+                      <Typography variant="body2" gutterBottom>
+                        <strong>{t.lessons}:</strong> {selectedCourse.lessons}
+                      </Typography>
+                      <Typography variant="body2" gutterBottom>
+                        <strong>{t.level}:</strong> {selectedCourse.level}
+                      </Typography>
+                    </Grid>
+                    
+                    <Grid item xs={6}>
+                      <Typography variant="h6" color="primary" gutterBottom>
+                        {t.topicsCovered}
+                      </Typography>
+                      <List>
+                        {selectedCourse.topics.map((topic, index) => (
+                          <ListItem key={index}>
+                            <ListItemText primary={`• ${topic}`} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Grid>
+                  </Grid>
+                  
+                  <Box sx={{ mt: 3, textAlign: 'center' }}>
+                    <Button variant="contained" color="primary" onClick={() => {
+                      alert(t.enrollSuccess);
+                      // Redirect to course content page
+                      window.location.href = `/course-content/${selectedCourse.id}`;
+                    }}>
+                      {t.enrollNow}
+                    </Button>
+                  </Box>
+                </Box>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => {
+                  setShowCourseDetail(false);
+                  setSelectedCourse(null);
+                }}>{t.close}</Button>
+              </DialogActions>
+            </Dialog>
+          )}
+          {showCommunitySection && (
+            <StyledPaper elevation={3} ref={communityRef} sx={{ mt: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)', p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                👥 {t.communityZone}
+              </Typography>
+              
+              <Typography variant="body1" gutterBottom sx={{ mt: 2 }}>
+                {t.communityZoneDesc}
+              </Typography>
+              
+              <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Grid item xs={12} sm={4}>
+                  <Paper 
+                    sx={{ 
+                      p: 3, 
+                      textAlign: 'center', 
+                      height: '100%', 
+                      cursor: 'pointer', 
+                      backgroundColor: 'rgba(25, 118, 210, 0.15)',
+                      '&:hover': { 
+                        backgroundColor: 'rgba(25, 118, 210, 0.3)',
+                        transform: 'translateY(-5px)',
+                        boxShadow: 4,
+                        transition: 'all 0.3s ease-in-out'
+                      },
+                      transition: 'all 0.3s ease-in-out',
+                      border: '2px solid',
+                      borderColor: 'primary.main',
+                      borderRadius: 3
+                    }}
+                    onClick={() => {
+                      setShowTradingStrategies(true);
+                      setShowCommunitySection(false);
+                    }}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h3" gutterBottom>
+                        🎓
+                      </Typography>
+                    </Box>
+                    <Typography variant="h6" gutterBottom fontWeight="bold" color="primary">
+                      {t.tradingStrategies}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t.tradingStrategiesDesc}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} sm={4}>
+                  <Paper 
+                    sx={{ 
+                      p: 3, 
+                      textAlign: 'center', 
+                      height: '100%', 
+                      cursor: 'pointer', 
+                      backgroundColor: 'rgba(255, 193, 7, 0.2)',
+                      '&:hover': { 
+                        backgroundColor: 'rgba(255, 193, 7, 0.3)',
+                        transform: 'translateY(-5px)',
+                        boxShadow: 4,
+                        transition: 'all 0.3s ease-in-out'
+                      },
+                      transition: 'all 0.3s ease-in-out',
+                      border: '2px solid',
+                      borderColor: 'secondary.main',
+                      borderRadius: 3
+                    }}
+                    onClick={() => {
+                      setShowMarketDiscussions(true);
+                      setShowCommunitySection(false);
+                    }}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h3" gutterBottom>
+                        💬
+                      </Typography>
+                    </Box>
+                    <Typography variant="h6" gutterBottom fontWeight="bold" color="secondary">
+                      {t.marketDiscussions}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t.marketDiscussionsDesc}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} sm={4}>
+                  <Paper 
+                    sx={{ 
+                      p: 3, 
+                      textAlign: 'center', 
+                      height: '100%', 
+                      cursor: 'pointer', 
+                      backgroundColor: 'rgba(3, 169, 244, 0.15)',
+                      '&:hover': { 
+                        backgroundColor: 'rgba(3, 169, 244, 0.3)',
+                        transform: 'translateY(-5px)',
+                        boxShadow: 4,
+                        transition: 'all 0.3s ease-in-out'
+                      },
+                      transition: 'all 0.3s ease-in-out',
+                      border: '2px solid',
+                      borderColor: 'info.main',
+                      borderRadius: 3
+                    }}
+                    onClick={() => {
+                      setShowExpertInsights(true);
+                      setShowCommunitySection(false);
+                    }}
+                  >
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="h3" gutterBottom>
+                        💡
+                      </Typography>
+                    </Box>
+                    <Typography variant="h6" gutterBottom fontWeight="bold" color="info">
+                      {t.expertInsights}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t.expertInsightsDesc}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  {t.activeDiscussions}:
+                </Typography>
+                <List dense>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t.discussionTopic1} 
+                      secondary={t.discussionTopic1Desc} 
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t.discussionTopic2} 
+                      secondary={t.discussionTopic2Desc} 
+                    />
+                  </ListItem>
+                  <ListItem>
+                    <ListItemText 
+                      primary={t.discussionTopic3} 
+                      secondary={t.discussionTopic3Desc} 
+                    />
+                  </ListItem>
+                </List>
+              </Box>
+              
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Button variant="outlined" color="primary" onClick={() => setShowCommunitySection(false)}>
+                  {t.hideCommunity}
+                </Button>
+              </Box>
+            </StyledPaper>
+          )}
+          
+          {/* Trading Strategies Section */}
+          {showTradingStrategies && (
+            <StyledPaper elevation={6} ref={strategiesRef} sx={{ mt: 3, p: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" color="primary" sx={{ mr: 1 }}>
+                  🎓
+                </Typography>
+                <Typography variant="h5" fontWeight="bold" color="primary">
+                  {t.tradingStrategies}
+                </Typography>
+              </Box>
+              
+              <Typography variant="body1" gutterBottom sx={{ mt: 2, fontSize: '1.1rem' }}>
+                {t.tradingStrategiesDesc}
+              </Typography>
+              
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(25, 118, 210, 0.1)', border: '1px solid', borderColor: 'primary.main', borderRadius: 2 }}>
+                    <Typography variant="h6" color="primary" gutterBottom fontWeight="bold">
+                      {t.scalpingStrategy}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.scalpingStrategyDesc}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.entryRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.scalpingEntryRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.exitRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.scalpingExitRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(255, 193, 7, 0.1)', border: '1px solid', borderColor: 'secondary.main', borderRadius: 2 }}>
+                    <Typography variant="h6" color="secondary" gutterBottom fontWeight="bold">
+                      {t.dayTradingStrategy}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.dayTradingStrategyDesc}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.entryRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.dayTradingEntryRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.exitRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.dayTradingExitRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(3, 169, 244, 0.1)', border: '1px solid', borderColor: 'info.main', borderRadius: 2 }}>
+                    <Typography variant="h6" color="info" gutterBottom fontWeight="bold">
+                      {t.swingTradingStrategy}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.swingTradingStrategyDesc}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.entryRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.swingTradingEntryRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.exitRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.swingTradingExitRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(76, 175, 80, 0.1)', border: '1px solid', borderColor: 'success.main', borderRadius: 2 }}>
+                    <Typography variant="h6" color="success" gutterBottom fontWeight="bold">
+                      {t.positionTradingStrategy}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.positionTradingStrategyDesc}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.entryRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.positionTradingEntryRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                    <Typography variant="subtitle2" color="text.primary" gutterBottom fontWeight="bold" sx={{ mt: 2 }}>
+                      {t.exitRules}:
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" component="div">
+                      {t.positionTradingExitRules.split('\n').map((line, i) => (
+                        <div key={i} style={{ paddingLeft: '20px', textIndent: '-20px' }}>• {line}</div>
+                      ))}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Button variant="contained" color="primary" onClick={() => setShowTradingStrategies(false)}>
+                  {t.hideStrategies}
+                </Button>
+              </Box>
+            </StyledPaper>
+          )}
+          
+          {/* Market Discussions Section */}
+          {showMarketDiscussions && (
+            <StyledPaper elevation={6} ref={discussionsRef} sx={{ mt: 3, p: 3, border: '1px solid', borderColor: 'secondary.main', borderRadius: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" color="secondary" sx={{ mr: 1 }}>
+                  💬
+                </Typography>
+                <Typography variant="h5" fontWeight="bold" color="secondary">
+                  {t.marketDiscussions}
+                </Typography>
+              </Box>
+              
+              <Typography variant="body1" gutterBottom sx={{ mt: 2, fontSize: '1.1rem' }}>
+                {t.marketDiscussionsDesc}
+              </Typography>
+              
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(255, 193, 7, 0.1)', border: '1px solid', borderColor: 'secondary.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(255, 193, 7, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="secondary" gutterBottom fontWeight="bold">
+                        {t.euroUsdAnalysis}
+                      </Typography>
+                      <Chip label="Forex" size="small" color="secondary" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.euroUsdAnalysisDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.postedBy} {t.userTraderPro} • {t.threeHoursAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert(`${t.viewDiscussion}: ${t.euroUsdAnalysis}`);
+                        }}
+                      >
+                        {t.viewDiscussion}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(255, 152, 0, 0.1)', border: '1px solid', borderColor: 'warning.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(255, 152, 0, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="warning" gutterBottom fontWeight="bold">
+                        {t.goldTrendPrediction}
+                      </Typography>
+                      <Chip label="Commodities" size="small" color="warning" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.goldTrendPredictionDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.postedBy} {t.userMarketGuru} • {t.fourHoursAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert(`${t.viewDiscussion}: ${t.goldTrendPrediction}`);
+                        }}
+                      >
+                        {t.viewDiscussion}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(244, 67, 54, 0.1)', border: '1px solid', borderColor: 'error.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(244, 67, 54, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="error" gutterBottom fontWeight="bold">
+                        {t.oilMarketUpdate}
+                      </Typography>
+                      <Chip label="Energy" size="small" color="error" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.oilMarketUpdateDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.postedBy} {t.userOilExpert} • {t.sixHoursAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert(`${t.viewDiscussion}: ${t.oilMarketUpdate}`);
+                        }}
+                      >
+                        {t.viewDiscussion}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(3, 169, 244, 0.1)', border: '1px solid', borderColor: 'info.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(3, 169, 244, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="info" gutterBottom fontWeight="bold">
+                        {t.techStockWatch}
+                      </Typography>
+                      <Chip label="Equity" size="small" color="info" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.techStockWatchDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.postedBy} {t.userTechTrader} • {t.eightHoursAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          alert(`${t.viewDiscussion}: ${t.techStockWatch}`);
+                        }}
+                      >
+                        {t.viewDiscussion}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Button variant="contained" color="secondary" onClick={() => setShowMarketDiscussions(false)}>
+                  {t.hideDiscussions}
+                </Button>
+              </Box>
+            </StyledPaper>
+          )}
+          
+          {/* Expert Insights Section */}
+          {showExpertInsights && (
+            <StyledPaper elevation={6} ref={insightsRef} sx={{ mt: 3, p: 3, border: '1px solid', borderColor: 'info.main', borderRadius: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h4" color="info" sx={{ mr: 1 }}>
+                  💡
+                </Typography>
+                <Typography variant="h5" fontWeight="bold" color="info">
+                  {t.expertInsights}
+                </Typography>
+              </Box>
+              
+              <Typography variant="body1" gutterBottom sx={{ mt: 2, fontSize: '1.1rem' }}>
+                {t.expertInsightsDesc}
+              </Typography>
+              
+              <Grid container spacing={3} sx={{ mt: 2 }}>
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(3, 169, 244, 0.1)', border: '1px solid', borderColor: 'info.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(2, 119, 189, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="info" gutterBottom fontWeight="bold">
+                        {t.weeklyMarketOutlook}
+                      </Typography>
+                      <Chip label="Market" size="small" color="info" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.weeklyMarketOutlookDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.by} {t.expertAnalyst} • {t.updatedToday}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="info"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Set detailed insight data
+                          setDetailedInsight({
+                            title: t.weeklyMarketOutlook,
+                            content: t.weeklyMarketOutlookDesc,
+                            author: t.expertAnalyst,
+                            date: t.updatedToday
+                          });
+                          setShowDetailedInsight(true);
+                        }}
+                      >
+                        {t.readMore}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(76, 175, 80, 0.1)', border: '1px solid', borderColor: 'success.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(46, 125, 50, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="success" gutterBottom fontWeight="bold">
+                        {t.riskManagementTips}
+                      </Typography>
+                      <Chip label="Risk" size="small" color="success" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.riskManagementTipsDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.by} {t.expertRiskManager} • {t.updatedYesterday}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="success"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Set detailed insight data
+                          setDetailedInsight({
+                            title: t.riskManagementTips,
+                            content: t.riskManagementTipsDesc,
+                            author: t.expertRiskManager,
+                            date: t.updatedYesterday
+                          });
+                          setShowDetailedInsight(true);
+                        }}
+                      >
+                        {t.readMore}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(255, 152, 0, 0.1)', border: '1px solid', borderColor: 'warning.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(255, 152, 0, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="warning" gutterBottom fontWeight="bold">
+                        {t.forexFundamentals}
+                      </Typography>
+                      <Chip label="Forex" size="small" color="warning" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.forexFundamentalsDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.by} {t.expertForexTrader} • {t.updatedTwoDaysAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="warning"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Set detailed insight data
+                          setDetailedInsight({
+                            title: t.forexFundamentals,
+                            content: t.forexFundamentalsDesc,
+                            author: t.expertForexTrader,
+                            date: t.updatedTwoDaysAgo
+                          });
+                          setShowDetailedInsight(true);
+                        }}
+                      >
+                        {t.readMore}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper sx={{ p: 3, height: '100%', backgroundColor: 'rgba(255, 193, 7, 0.1)', border: '1px solid', borderColor: 'secondary.main', borderRadius: 2, '&:hover': { backgroundColor: 'rgba(255, 193, 7, 0.2)' }, transition: 'all 0.3s ease-in-out' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" color="secondary" gutterBottom fontWeight="bold">
+                        {t.stockValuationGuide}
+                      </Typography>
+                      <Chip label="Equity" size="small" color="secondary" />
+                    </Box>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      {t.stockValuationGuideDesc}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                      {t.by} {t.expertValueInvestor} • {t.updatedThreeDaysAgo}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Set detailed insight data
+                          setDetailedInsight({
+                            title: t.stockValuationGuide,
+                            content: t.stockValuationGuideDesc,
+                            author: t.expertValueInvestor,
+                            date: t.updatedThreeDaysAgo
+                          });
+                          setShowDetailedInsight(true);
+                        }}
+                      >
+                        {t.readMore}
+                      </Button>
+                    </Box>
+                  </Paper>
+                </Grid>
+              </Grid>
+              
+              <Box sx={{ mt: 3, textAlign: 'center' }}>
+                <Button variant="contained" color="info" onClick={() => setShowExpertInsights(false)}>
+                  {t.hideInsights}
+                </Button>
+              </Box>
+            </StyledPaper>
+          )}
+          
+          {/* Trading Stats */}
+          <StyledPaper elevation={3} sx={{ mt: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+            <Typography variant="h6" gutterBottom>
+              {t.tradingStats}
+            </Typography>
+            <Grid container spacing={1}>
+              <Grid item xs={6}>
+                <Typography variant="body2">{t.openPositions}</Typography>
+                <Typography variant="h6" color="primary">3</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2">{t.profitLoss}</Typography>
+                <Typography variant="h6" color="success.main">+125.30 USD</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2">{t.successRate}</Typography>
+                <Typography variant="h6" color="secondary">78%</Typography>
+              </Grid>
+              <Grid item xs={6}>
+                <Typography variant="body2">{t.volatility}</Typography>
+                <Typography variant="h6" color="warning.main">{t.medium}</Typography>
+              </Grid>
+            </Grid>
+            <Box sx={{ mt: 2, textAlign: 'center' }}>
+              <Button 
+                variant="contained" 
+                color="primary"
+                onClick={() => window.location.href = '/trade-history'}
+              >
+                {t.viewTradeHistory || 'View Trade History'}
+              </Button>
+            </Box>
+          </StyledPaper>
+          
+          {/* Market News */}
+          <StyledPaper elevation={3} sx={{ mt: 3, backgroundColor: 'rgba(0, 0, 0, 0.02)' }}>
+            <Typography variant="h6" gutterBottom>
+              {t.marketNews}
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemText primary={t.fedPauseHike} secondary={t.hoursAgo.replace('{hours}', '2')} />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary={t.iamUpQuarterly} secondary={t.hoursAgo.replace('{hours}', '4')} />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary={t.cryptoRegulationNews} secondary={t.hoursAgo.replace('{hours}', '6')} />
+              </ListItem>
+            </List>
+          </StyledPaper>
+          
+          {/* Expert Insights Section - Modal */}
+          {detailedInsight && (
+            <Dialog open={showDetailedInsight} onClose={() => { 
+              setDetailedInsight(null); 
+              setShowDetailedInsight(false); 
+            }} maxWidth="md" fullWidth>
+              <DialogTitle>
+                {detailedInsight.title}
+              </DialogTitle>
+              <DialogContent>
+                <Typography variant="body1" sx={{ mt: 2 }}>
+                  {detailedInsight.content}
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                  {t.by} {detailedInsight.author} • {detailedInsight.date}
+                </Typography>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => { 
+                  setDetailedInsight(null); 
+                  setShowDetailedInsight(false); 
+                }}>{t.close}</Button>
+              </DialogActions>
+            </Dialog>
+          )}
+        </Grid>
+      </Grid>
+    </Container>
+);
+}
+
+export default Dashboard;

@@ -1,0 +1,147 @@
+%PDF-1.4
+1 0 obj
+<<
+/Type /Catalog
+/Pages 2 0 R
+>>
+endobj
+
+2 0 obj
+<<
+/Type /Pages
+/Kids [3 0 R]
+/Count 1
+>>
+endobj
+
+3 0 obj
+<<
+/Type /Page
+/Parent 2 0 R
+/MediaBox [0 0 612 792]
+/Contents 4 0 R
+/Resources <<
+/Font <<
+/F1 5 0 R
+>>
+>>
+>>
+endobj
+
+4 0 obj
+<<
+/Length 100
+>>
+stream
+BT
+/F1 16 Tf
+72 700 Td
+(Quantitative Models Reference) Tj
+ET
+BT
+/F1 12 Tf
+72 650 Td
+(Reference guide to quantitative trading models and methodologies.) Tj
+ET
+BT
+/F1 12 Tf
+72 630 Td
+(1. Black-Scholes Model) Tj
+ET
+BT
+/F1 12 Tf
+72 610 Td
+(2. Binomial Option Pricing Model) Tj
+ET
+BT
+/F1 12 Tf
+72 590 Td
+(3. Monte Carlo Simulation) Tj
+ET
+BT
+/F1 12 Tf
+72 570 Td
+(4. Geometric Brownian Motion) Tj
+ET
+BT
+/F1 12 Tf
+72 550 Td
+(5. Stochastic Calculus Applications) Tj
+ET
+BT
+/F1 12 Tf
+72 530 Td
+(6. Mean Reversion Models) Tj
+ET
+BT
+/F1 12 Tf
+72 510 Td
+(7. Jump Diffusion Models) Tj
+ET
+BT
+/F1 12 Tf
+72 490 Td
+(8. Regime Switching Models) Tj
+ET
+BT
+/F1 12 Tf
+72 470 Td
+(9. GARCH Models) Tj
+ET
+BT
+/F1 12 Tf
+72 450 Td
+(10. Stochastic Volatility Models) Tj
+ET
+BT
+/F1 12 Tf
+72 430 Td
+(11. Multifactor Models) Tj
+ET
+BT
+/F1 12 Tf
+72 410 Td
+(12. Principal Component Analysis) Tj
+ET
+BT
+/F1 12 Tf
+72 390 Td
+(13. Factor Models) Tj
+ET
+BT
+/F1 12 Tf
+72 370 Td
+(14. Cointegration Analysis) Tj
+ET
+BT
+/F1 12 Tf
+72 350 Td
+(15. Machine Learning Models) Tj
+ET
+endstream
+endobj
+
+5 0 obj
+<<
+/Type /Font
+/Subtype /Type1
+/BaseFont /Helvetica
+>>
+endobj
+
+xref
+0 6
+0000000000 65535 f 
+0000000010 00000 n 
+0000000053 00000 n 
+0000000125 00000 n 
+0000000292 00000 n 
+0000000747 00000 n 
+trailer
+<<
+/Size 6
+/Root 1 0 R
+>>
+startxref
+797
+%%EOF
