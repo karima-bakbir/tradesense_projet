@@ -1,5 +1,5 @@
 import os
-from flask import Flask, send_from_directory, request
+from flask import Flask, send_from_directory, request, redirect
 from flask_cors import CORS
 from models import db
 from routes.users import users_bp
@@ -38,10 +38,10 @@ def create_app():
     def health_check():
         return {"message": "TradeSense API is running", "status": "success"}
     
-    # Root route for API server
+    # Root route - redirect to frontend
     @app.route('/')
     def root():
-        return {"message": "TradeSense API Server", "status": "running", "frontend_url": "https://tradesense-projet.vercel.app"}
+        return redirect('https://tradesense-projet-rjrmrh2sf-karima-bakbirs-projects.vercel.app')
     
     # Serve React App (catch-all route)
     @app.route('/<path:path>')
