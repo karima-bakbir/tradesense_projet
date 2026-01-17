@@ -38,22 +38,22 @@ def create_app():
     def health_check():
         return {"message": "TradeSense API is running", "status": "success"}
     
-    # Serve React static files
-    @app.route('/static/<path:filename>')
-    def serve_static(filename):
-        build_folder = os.path.join(os.path.dirname(__file__), 'frontend', 'build', 'static')
-        return send_from_directory(build_folder, filename)
-    
     # Serve React App (catch-all route)
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve_react_app(path=''):
         build_folder = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
         
-        # Don't serve index.html for API routes
-        if path.startswith('api/') or path.startswith('auth/') or '/api/' in path:
-            # This will be handled by the appropriate API routes defined elsewhere
+        # Handle API routes separately
+        if path.startswith('api/') or path.startswith('users/') or path.startswith('challenges/') or path.startswith('trades/') or path.startswith('real_time_data/') or path.startswith('ai_signals/') or path.startswith('auth/'):
+            # Return 404 so Flask's API routes can handle them
             return {"error": "API route not found"}, 404
+        
+        # Serve static files
+        if path.startswith('static/'):
+            static_folder = os.path.join(build_folder, path)
+            if os.path.exists(static_folder):
+                return send_from_directory(build_folder, path)
         elif path != "" and os.path.exists(os.path.join(build_folder, path)):
             return send_from_directory(build_folder, path)
         else:
