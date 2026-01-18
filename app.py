@@ -10,7 +10,9 @@ from routes.ai_signals import ai_signals_bp
 
 
 def create_app():
-    app = Flask(__name__, static_folder='frontend/build/static', static_url_path='/static')
+    # Specify instance path to avoid read-only filesystem issues in serverless environments
+    instance_path = os.environ.get('INSTANCE_PATH', '/tmp') if os.environ.get('SERVERLESS_ENV') else None
+    app = Flask(__name__, static_folder='frontend/build/static', static_url_path='/static', instance_path=instance_path)
     # Use PostgreSQL in production, SQLite in development
     DATABASE_URL = os.environ.get('DATABASE_URL') or 'sqlite:///tradesense.db'
     # Remove 'postgres://' prefix if present (for compatibility with newer Heroku)
@@ -58,9 +60,10 @@ def create_app():
         else:
             return send_from_directory(build_folder, 'index.html')
     
-    # Create tables
-    with app.app_context():
-        db.create_all()
+    # Only create tables in development mode
+    if not os.environ.get('SERVERLESS_ENV'):
+        with app.app_context():
+            db.create_all()
     
     return app
 
