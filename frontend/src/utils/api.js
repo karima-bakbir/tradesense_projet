@@ -116,20 +116,44 @@ export const getPriceInfo = (ticker) => {
 };
 
 // AI Signals
-export const getAISignal = (ticker) => {
-  return api.get(`/ai/signals/${ticker}`);
+export const getAISignal = async (ticker) => {
+  try {
+    const response = await api.get(`/ai/signals/${ticker}`);
+    return response;
+  } catch (error) {
+    console.error(`Error fetching AI signal for ${ticker}:`, error);
+    throw error;
+  }
 };
 
-export const getMultipleAISignals = (tickers) => {
-  return api.post('/ai/signals', { tickers });
+export const getMultipleAISignals = async (tickers) => {
+  try {
+    const response = await api.post('/ai/signals', { tickers });
+    return response;
+  } catch (error) {
+    console.error('Error fetching multiple AI signals:', error);
+    throw error;
+  }
 };
 
-export const getPopularAISignals = () => {
-  return api.get('/ai/signals/popular');
+export const getPopularAISignals = async () => {
+  try {
+    const response = await api.get('/ai/signals/popular');
+    return response;
+  } catch (error) {
+    console.error('Error fetching popular AI signals:', error);
+    throw error;
+  }
 };
 
-export const getDetailedRecommendation = (ticker) => {
-  return api.get(`/ai/recommendations/${ticker}`);
+export const getDetailedRecommendation = async (ticker) => {
+  try {
+    const response = await api.get(`/ai/recommendations/${ticker}`);
+    return response;
+  } catch (error) {
+    console.error(`Error fetching detailed recommendation for ${ticker}:`, error);
+    throw error;
+  }
 };
 
 // News

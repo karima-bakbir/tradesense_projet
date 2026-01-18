@@ -376,28 +376,46 @@ const DashboardContent = () => {
       // Fetch AI signals for popular assets
       try {
         const response = await getPopularAISignals();
-        if (response.data && response.data.popular_signals) {
-          const signals = Object.entries(response.data.popular_signals).map(([symbol, signalData], index) => {
-            if (!signalData.error) {
-              return {
-                id: index + 1,
-                asset: symbol,
-                signal: signalData.signal.toUpperCase(),
-                confidence: signalData.confidence,
-                reason: signalData.recommendation.split('.')[0] || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
-                technicalAnalysis: signalData.recommendation || `${signalData.signal.toUpperCase()} signal for ${symbol}`,
-                indicators: ['Technical Analysis', 'Machine Learning', 'Pattern Recognition'],
-                targetPrice: signalData.price * (signalData.signal === 'buy' ? 1.05 : signalData.signal === 'sell' ? 0.95 : 1.02),
-                stopLoss: signalData.price * (signalData.signal === 'buy' ? 0.98 : signalData.signal === 'sell' ? 1.02 : 0.99),
-                timeFrame: signalData.timeframe || 'Short-term (1-3 days)'
-              };
-            }
-            return null; // Skip assets with errors
-          }).filter(Boolean); // Remove null entries
+        
+        // Vérifier que la réponse est valide
+        if (response && response.data) {
+          let signalsData = response.data;
+          
+          // Si les signaux sont dans une propriété spécifique, les extraire
+          if (response.data.popular_signals) {
+            signalsData = response.data.popular_signals;
+          }
+          
+          if (signalsData) {
+            const signals = Object.entries(signalsData).map(([symbol, signalData], index) => {
+              // Vérifier que signalData existe et contient les propriétés nécessaires
+              if (signalData && typeof signalData === 'object' && !signalData.error) {
+                // Extraire les propriétés avec des valeurs par défaut
+                const signal = signalData.signal || 'HOLD';
+                const confidence = signalData.confidence || 50;
+                const price = signalData.price || 0;
+                const recommendation = signalData.recommendation || `${signal.toUpperCase()} signal for ${symbol}`;
                 
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setAiSignals(signals);
+                return {
+                  id: index + 1,
+                  asset: symbol,
+                  signal: signal.toUpperCase(),
+                  confidence: confidence,
+                  reason: recommendation.split('.')[0] || `${signal.toUpperCase()} signal for ${symbol}`,
+                  technicalAnalysis: recommendation,
+                  indicators: signalData.indicators || ['Technical Analysis', 'Machine Learning', 'Pattern Recognition'],
+                  targetPrice: price * (signal === 'buy' ? 1.05 : signal === 'sell' ? 0.95 : 1.02),
+                  stopLoss: price * (signal === 'buy' ? 0.98 : signal === 'sell' ? 1.02 : 0.99),
+                  timeFrame: signalData.timeframe || 'Short-term (1-3 days)'
+                };
+              }
+              return null; // Skip assets with errors or invalid data
+            }).filter(Boolean); // Remove null entries
+            
+            // Only update state if component is still mounted
+            if (isMounted) {
+              setAiSignals(signals);
+            }
           }
         }
       } catch (error) {
@@ -529,9 +547,29 @@ const DashboardContent = () => {
     const loadAISignals = async () => {
       try {
         const signalsResponse = await getMultipleAISignals([selectedAsset]);
-        setAiSignals(Array.isArray(signalsResponse.data.signals) ? signalsResponse.data.signals : []);
+        
+        // Vérifier que la réponse est valide
+        if (signalsResponse && signalsResponse.data) {
+          let signalsData = signalsResponse.data;
+          
+          // Si les signaux sont dans une propriété spécifique, les extraire
+          if (signalsResponse.data.signals) {
+            signalsData = signalsResponse.data.signals;
+          }
+          
+          // Mettre à jour les signaux si les données sont valides
+          if (signalsData) {
+            const signalsArray = Array.isArray(signalsData) ? signalsData : [];
+            setAiSignals(signalsArray);
+          } else {
+            setAiSignals([]);
+          }
+        } else {
+          setAiSignals([]);
+        }
       } catch (error) {
         console.error('Error loading AI signals:', error);
+        setAiSignals([]); // Réinitialiser les signaux en cas d'erreur
       }
     };
     
